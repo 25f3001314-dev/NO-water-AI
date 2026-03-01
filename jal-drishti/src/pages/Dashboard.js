@@ -1,302 +1,290 @@
-import React from 'react';
-import { IndiaMap } from '@vishalvoid/react-india-map';
-import { Activity, Droplets, TrendingDown, Zap } from 'lucide-react';
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts';
-import MetricCard from '../components/common/MetricCard';
-import SectionCard from '../components/common/SectionCard';
-import StatusBadge from '../components/common/StatusBadge';
-import { useClimateControlData } from '../hooks/useClimateControlData';
-
-const STATUS_COLOR = {
-  Green: '#22c55e',
-  Yellow: '#f59e0b',
-  Red: '#ef4444'
-};
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, Plus, Trash2, Activity } from 'lucide-react';
 
 const Dashboard = () => {
-  const { snapshot, logs, loading, avgWaterIndex } = useClimateControlData();
+  // ✅ 4 STATIC INDIAN DATA CENTERS
+  const locations = [
+    { id: 1, name: 'Mumbai', temp: 28, water: 78, env: 'Humid', power: '850kW' },
+    { id: 2, name: 'Hyderabad', temp: 24, water: 65, env: 'Moderate', power: '720kW' },
+    { id: 3, name: 'Chennai', temp: 30, water: 82, env: 'Very Humid', power: '910kW' },
+    { id: 4, name: 'Delhi NCR', temp: 35, water: 91, env: 'Dry', power: '980kW' }
+  ];
 
-  if (loading || !snapshot.recommendation || !snapshot.migration) {
-    return <p className="text-sm text-slate-400">Loading climate control center...</p>;
-  }
+  // ✅ 100 TASKS DISTRIBUTED
+  const generateInitialTasks = () => {
+    const taskNames = ['Data Processing', 'Analytics', 'ML Training', 'API Server', 'Cache Sync', 'Backup Job', 'Queue Worker', 'Indexing', 'Reporting', 'Monitoring'];
+    const tasks = [];
+    for (let i = 0; i < 100; i++) {
+      tasks.push({
+        id: i + 1,
+        name: `${taskNames[i % taskNames.length]} #${Math.floor(i / taskNames.length) + 1}`,
+        source: locations[Math.floor(Math.random() * locations.length)].name,
+        status: i % 3 === 0 ? 'transferring' : 'running',
+        progress: i % 3 === 0 ? Math.floor(Math.random() * 100) : 100
+      });
+    }
+    return tasks;
+  };
 
-  const stateData = snapshot.cities.map((city) => ({
-    id: city.stateId,
-    customData: {
-      city: city.city,
-      temperature: `${city.temperature}°C`,
-      humidity: `${city.humidity}%`,
-      waterIndex: city.waterIndex,
-      status: city.status
-    },
-    fill: STATUS_COLOR[city.waterSeverity]
-  }));
+  const [tasks, setTasks] = useState(generateInitialTasks());
+  const [newTask, setNewTask] = useState('');
+  const [selectedSource, setSelectedSource] = useState('Mumbai');
+  const [geminiLogs, setGeminiLogs] = useState([]);
 
-  const mapStyle = {
-    backgroundColor: '#020617',
-    hoverColor: '#0f172a',
-    stroke: '#334155',
-    strokeWidth: 1,
-    tooltipConfig: {
-      backgroundColor: 'rgba(2, 6, 23, 0.95)',
-      textColor: '#e2e8f0'
+  // ✅ SIMULATE TASK TRANSFERS
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTasks(prev => prev.map(task => {
+        if (task.status === 'transferring') {
+          const newProgress = task.progress + Math.random() * 15;
+          if (newProgress >= 100) {
+            // Transfer complete - move to new location
+            const newLocation = locations[Math.floor(Math.random() * locations.length)].name;
+            
+            // Add Gemini log
+            const analysis = `✅ Task "${task.name}" successfully transferred from ${task.source} to ${newLocation}. Temperature optimized: -${Math.floor(Math.random() * 8 + 2)}°C. Environment: Balanced`;
+            setGeminiLogs(prev => [
+              {
+                task: task.name,
+                from: task.source,
+                to: newLocation,
+                analysis: analysis,
+                timestamp: new Date().toLocaleTimeString()
+              },
+              ...prev.slice(0, 4)
+            ]);
+
+            return {
+              ...task,
+              source: newLocation,
+              status: 'running',
+              progress: 100
+            };
+          }
+          return { ...task, progress: newProgress };
+        }
+        return task;
+      }));
+    }, 2000); // Update every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ✅ ADD NEW TASK
+  const addTask = () => {
+    if (newTask.trim()) {
+      const newId = Math.max(...tasks.map(t => t.id), 0) + 1;
+      setTasks(prev => [...prev, {
+        id: newId,
+        name: newTask,
+        source: selectedSource,
+        status: 'running',
+        progress: 100
+      }]);
+      setNewTask('');
     }
   };
 
-  const chartData = snapshot.cities.map((city) => ({
-    city: city.city,
-    load: city.load,
-    waterIndex: city.waterIndex
-  }));
+  // ✅ DELETE TASK
+  const deleteTask = (id) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
 
-  const autonomousMode = snapshot.autonomousMode;
-  const isAIActive = autonomousMode?.enabled && autonomousMode?.status === 'ACTIVE';
+  // ✅ TRANSFER TASK
+  const startTransfer = (taskId) => {
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, status: 'transferring', progress: 0 } : t
+    ));
+  };
+
+  const transferringCount = tasks.filter(t => t.status === 'transferring').length;
+  const runningCount = tasks.filter(t => t.status === 'running').length;
 
   return (
-    <div className="space-y-5">
-      {/* 🤖 AI AUTONOMOUS MODE BANNER */}
-      {isAIActive && (
-        <div className="relative overflow-hidden rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-500/10 to-teal-500/10 p-4 backdrop-blur">
-          <div className="absolute right-0 top-0 -z-10 h-full w-1/3 bg-cyan-500/5 blur-3xl" />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-3 w-3 items-center justify-center">
-                <span className="relative h-3 w-3 rounded-full bg-cyan-400">
-                  <span className="absolute h-3 w-3 rounded-full bg-cyan-400 animate-ping opacity-75" />
-                </span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-cyan-950/20 to-slate-950 text-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-emerald-400 bg-clip-text text-transparent">
+              🌊 Jal-Drishti Task Management
+            </h1>
+            <p className="text-slate-400 mt-2">Distributed Task Transfer & Environmental Optimization</p>
+          </div>
+          <div className="flex items-center gap-4 text-sm bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span>{runningCount} Running | {transferringCount} Transferring</span>
+          </div>
+        </div>
+
+        {/* Data Centers Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {locations.map((loc) => {
+            const locTasks = tasks.filter(t => t.source === loc.name);
+            return (
+              <div key={loc.id} className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-slate-200 text-lg">{loc.name}</h3>
+                    <p className="text-xs text-slate-400">{loc.env}</p>
+                  </div>
+                  <div className="text-2xl font-bold text-red-400">{loc.temp}°C</div>
+                </div>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Tasks:</span>
+                    <span className="text-cyan-400 font-semibold">{locTasks.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Water:</span>
+                    <span className="text-cyan-400">{loc.water}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Power:</span>
+                    <span className="text-emerald-400">{loc.power}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold text-cyan-300">🤖 AI AUTONOMOUS MODE: ACTIVE</p>
-                <p className="text-xs text-slate-400">Gemini AI + Weather Integration + Energy Optimization</p>
+            );
+          })}
+        </div>
+
+        {/* Main Content - Tasks + Gemini */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+          {/* Tasks List (Left - 2 cols) */}
+          <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+            <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-cyan-400">
+              📋 Active Tasks ({tasks.length})
+            </h3>
+
+            {/* Add Task Form */}
+            <div className="mb-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="Task name..."
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addTask()}
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-cyan-500"
+                />
+                <select
+                  value={selectedSource}
+                  onChange={(e) => setSelectedSource(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-cyan-500"
+                >
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.name}>{loc.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={addTask}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 flex items-center gap-2 text-sm transition"
+                >
+                  <Plus className="w-4 h-4" /> Add
+                </button>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-mono text-slate-400">Method: {autonomousMode?.methodology || 'Hybrid'}</p>
-              {snapshot.lastDecision && (
-                <p className="text-xs text-emerald-400">Confidence: {Math.round(snapshot.lastDecision.confidence * 100)}%</p>
+
+            {/* Tasks Grid */}
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {tasks.map((task) => (
+                <div key={task.id} className={`p-3 rounded-lg border flex items-center gap-3 transition-all ${
+                  task.status === 'transferring'
+                    ? 'bg-gradient-to-r from-orange-500/20 to-emerald-500/20 border-orange-400/30' 
+                    : 'bg-slate-800/30 border-slate-700/50'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    task.status === 'transferring' ? 'bg-orange-400 animate-ping' : 'bg-emerald-400'
+                  }`} />
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-200 text-sm truncate">{task.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-slate-400">{task.source}</span>
+                      {task.status === 'transferring' && (
+                        <>
+                          <ArrowRight className="w-3 h-3 text-orange-400" />
+                          <div className="flex-1 bg-slate-800 rounded-full h-1.5">
+                            <div className="bg-gradient-to-r from-orange-400 to-emerald-400 h-1.5 rounded-full" style={{width: `${task.progress}%`}} />
+                          </div>
+                          <span className="text-xs text-orange-400 font-semibold">{Math.floor(task.progress)}%</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1">
+                    {task.status === 'running' && (
+                      <button
+                        onClick={() => startTransfer(task.id)}
+                        className="p-1 hover:bg-orange-500/30 rounded transition"
+                        title="Start transfer"
+                      >
+                        <ArrowRight className="w-4 h-4 text-orange-400" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteTask(task.id)}
+                      className="p-1 hover:bg-red-500/30 rounded transition"
+                      title="Delete task"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Gemini AI Summary (Right - 1 col) */}
+          <div className="bg-gradient-to-b from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 rounded-2xl p-6 backdrop-blur-sm">
+            <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-emerald-400">
+              🧠 Gemini Analysis
+            </h3>
+            
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {geminiLogs.length > 0 ? (
+                geminiLogs.map((log, idx) => (
+                  <div key={idx} className="p-4 bg-slate-900/40 border border-emerald-500/20 rounded-xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                      <span className="text-xs text-emerald-300">{log.timestamp}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-cyan-300 mb-2">
+                      {log.from} → {log.to}
+                    </p>
+                    <p className="text-xs text-slate-300 leading-relaxed">{log.analysis}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <p className="text-sm">Monitoring task transfers...</p>
+                  <p className="text-xs mt-2">Real-time analysis will appear here</p>
+                </div>
               )}
             </div>
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="Average Water Availability Index"
-          value={`${avgWaterIndex}`}
-          helper="Across 4 active data centers"
-          status={avgWaterIndex >= 60 ? 'Optimal' : 'Warning'}
-        />
-        <MetricCard
-          title="AI Cooling Cost Prediction"
-          value={`₹ ${snapshot.recommendation.coolingCostPredictionINR.toLocaleString('en-IN')}`}
-          helper="Simulated ML output"
-          status="Active"
-        />
-        <MetricCard
-          title="Estimated Water Saving"
-          value={`${snapshot.recommendation.waterSavingPct}%`}
-          helper="Current migration cycle"
-          status="Optimal"
-        />
-        <MetricCard
-          title="Estimated Energy Reduction"
-          value={`${snapshot.recommendation.energyReductionPct}%`}
-          helper="Post optimization"
-          status="Optimal"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <SectionCard
-          className="xl:col-span-2"
-          title="India Data Center Map"
-          subtitle="State-level water risk overlay for Mumbai, Hyderabad, Chennai, Delhi NCR"
-        >
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-            <IndiaMap stateData={stateData} mapStyle={mapStyle} />
+        {/* Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+            <h4 className="text-slate-400 text-sm mb-2">Total Tasks</h4>
+            <p className="text-3xl font-bold text-cyan-400">{tasks.length}</p>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-2 py-1 text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" /> Green: Water healthy
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-2 py-1 text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-amber-500" /> Yellow: Moderate stress
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-2 py-1 text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-red-500" /> Red: Critical stress
-            </span>
+          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+            <h4 className="text-slate-400 text-sm mb-2">Running Tasks</h4>
+            <p className="text-3xl font-bold text-emerald-400">{runningCount}</p>
           </div>
-        </SectionCard>
-
-        <SectionCard title="🤖 Real-Time Gemini Monitoring" subtitle="AI-driven workload and climate stress analysis">
-          <div className="space-y-3">
-            <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-100">
-              <p className="mb-2 font-medium">✨ AI Decision:</p>
-              <p>{snapshot.geminiMonitor.summary}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <MetricCard 
-                title="Stressed Region" 
-                value={snapshot.geminiMonitor.stressedRegion}
-                status="critical"
-              />
-              <MetricCard 
-                title="Thermal Risk" 
-                value={`${snapshot.geminiMonitor.thermalRisk}%`}
-                status={snapshot.geminiMonitor.thermalRisk > 60 ? 'critical' : 'active'}
-              />
-              <MetricCard 
-                title="Task Pressure" 
-                value={`${snapshot.geminiMonitor.taskPressure}/100`}
-                status={snapshot.geminiMonitor.taskPressure > 70 ? 'high cost' : 'optimal'}
-              />
-              <MetricCard 
-                title="AI Confidence" 
-                value={`${Math.round((snapshot.geminiMonitor.confidence || 0.75) * 100)}%`}
-                status="active"
-              />
-            </div>
-            {snapshot.lastDecision && (
-              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/50 p-2 text-xs text-slate-400">
-                <p className="font-mono mb-1">📊 Method: <span className="text-slate-300">{snapshot.lastDecision.method}</span></p>
-                <p className="line-clamp-2">💡 Reason: <span className="text-slate-300">{snapshot.lastDecision.reason}</span></p>
-              </div>
-            )}
+          <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 backdrop-blur-sm">
+            <h4 className="text-slate-400 text-sm mb-2">Transferring</h4>
+            <p className="text-3xl font-bold text-orange-400 animate-pulse">{transferringCount}</p>
           </div>
-        </SectionCard>
-      </div>
-
-      <SectionCard title="Data Center Status Cards" subtitle="Live city-level thermal, load and water intelligence">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
-          {snapshot.cities.map((city) => (
-            <div key={city.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-base font-semibold">{city.city}</h4>
-                <StatusBadge value={city.status} />
-              </div>
-
-              <div className="space-y-2 text-sm text-slate-300">
-                <p className="flex justify-between"><span>Temperature</span> <strong>{city.temperature}°C</strong></p>
-                <p className="flex justify-between"><span>Humidity</span> <strong>{city.humidity}%</strong></p>
-                <p className="flex justify-between"><span>Cooling Water</span> <strong>{city.coolingWaterM3} m³</strong></p>
-              </div>
-
-              <div className="mt-3">
-                <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
-                  <span>Data Center Load</span>
-                  <span>{city.load}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      city.load > 84 ? 'bg-red-500' : city.load > 68 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${city.load}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
-      </SectionCard>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <SectionCard
-          title="AI Optimization Panel"
-          subtitle="Migration and cost intelligence"
-          rightContent={<StatusBadge value="Active" />}
-        >
-          <div className="space-y-3 text-sm">
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-slate-200">
-              <p className="font-medium">{snapshot.recommendation.message}</p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                <p className="text-xs text-slate-400">Water Saving</p>
-                <p className="mt-1 flex items-center gap-1 text-lg font-semibold text-emerald-300">
-                  <Droplets className="h-4 w-4" /> {snapshot.recommendation.waterSavingPct}%
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                <p className="text-xs text-slate-400">Energy Cost Reduction</p>
-                <p className="mt-1 flex items-center gap-1 text-lg font-semibold text-cyan-300">
-                  <TrendingDown className="h-4 w-4" /> {snapshot.recommendation.energyReductionPct}%
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                <p className="text-xs text-slate-400">Cooling Cost Estimate</p>
-                <p className="mt-1 flex items-center gap-1 text-lg font-semibold text-blue-300">
-                  <Zap className="h-4 w-4" /> ₹{snapshot.recommendation.coolingCostPredictionINR.toLocaleString('en-IN')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Task Migration Simulation" subtitle="Running → Migrating → Running with live logs">
-          <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950 p-3">
-            <p className="text-sm text-slate-300">Task ID: <strong className="text-slate-100">{snapshot.migration.taskId}</strong></p>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {snapshot.migration.statusFlow.map((step, index) => {
-                const isActive = index === snapshot.migration.currentStatusIndex;
-                return (
-                  <div
-                    key={`${step}-${index}`}
-                    className={`rounded-lg border px-2 py-2 text-center text-xs font-medium ${
-                      isActive
-                        ? 'border-cyan-400/60 bg-cyan-500/15 text-cyan-200 animate-pulse'
-                        : 'border-slate-700 bg-slate-900 text-slate-400'
-                    }`}
-                  >
-                    {step}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-300">
-              <span className="rounded-full border border-slate-700 px-2 py-1">Water Saving: {snapshot.migration.waterSavingPct}%</span>
-              <span className="rounded-full border border-slate-700 px-2 py-1">Energy Saving: {snapshot.migration.energySavingPct}%</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-            <p className="mb-2 flex items-center gap-2 text-sm text-slate-300">
-              <Activity className="h-4 w-4 text-cyan-300" /> Migration Logs
-            </p>
-            <div className="max-h-40 space-y-1 overflow-auto text-xs text-slate-400">
-              {logs.map((line, index) => (
-                <p key={`${line}-${index}`} className="rounded bg-slate-900 px-2 py-1">{line}</p>
-              ))}
-            </div>
-          </div>
-        </SectionCard>
       </div>
-
-      <SectionCard title="Load vs Water Availability" subtitle="City-wise balancing indicators for AI scheduler">
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 16, right: 24, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="city" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="load" stroke="#22d3ee" strokeWidth={2} />
-              <Line type="monotone" dataKey="waterIndex" stroke="#34d399" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </SectionCard>
     </div>
   );
 };

@@ -29,6 +29,7 @@ const Login = ({ onLoginSuccess }) => {
       onLoginSuccess({ token: 'demo-token', user: mockUser });
       
       setLoading(false);
+      window.location.href = '/dashboard';
     }, 1000);
   };
 
