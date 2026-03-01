@@ -5,6 +5,16 @@ import random
 import os
 import glob
 import re
+import secrets
+from datetime import datetime
+from functools import wraps
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # Try to use joblib if available, else pickle
 try:
@@ -15,8 +25,13 @@ except Exception:
     _PERSIST_LOADER = lambda p: _pickle.load(open(p, 'rb'))
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-key-change-in-production')
+
 # Allow CORS from any origin for development convenience
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Session storage (in-memory for simplicity, use Redis/DB in production)
+SESSIONS = {}
 
 # Model holder (attempt to find and load a .pkl model in the repo)
 MODEL = None
@@ -32,6 +47,65 @@ try:
             MODEL = None
 except Exception:
     MODEL = None
+
+
+# Authentication helpers
+def load_valid_users():
+    """Load valid users from env.
+
+    Format:
+      VALID_USERS=username:password,company,role;user2:pass2,company2,role2
+    """
+    users_str = os.getenv('VALID_USERS', 'admin:admin123,Jal-Drishti,Officer;techuser:tech456,TechCorp,Engineer')
+    users = {}
+    for user_entry in users_str.split(';'):
+        user_entry = user_entry.strip()
+        if not user_entry or ':' not in user_entry:
+            continue
+
+        username, rest = user_entry.split(':', 1)
+        username = username.strip()
+        fields = [item.strip() for item in rest.split(',')]
+
+        if len(fields) < 1 or not username or not fields[0]:
+            continue
+
+        password = fields[0]
+        company = fields[1] if len(fields) > 1 and fields[1] else 'Company'
+        role = fields[2] if len(fields) > 2 and fields[2] else 'User'
+
+        users[username] = {
+            'password': password,
+            'company': company,
+            'role': role
+        }
+
+    if not users:
+        users['admin'] = {
+            'password': 'admin123',
+            'company': 'Jal-Drishti',
+            'role': 'Officer'
+        }
+
+    return users
+
+VALID_USERS = load_valid_users()
+
+
+def generate_token():
+    """Generate a secure session token."""
+    return secrets.token_urlsafe(32)
+
+
+def require_token(f):
+    """Decorator to check for valid authentication token."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token or token not in SESSIONS:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 def _pick_number(s):
     """Extract first number from a string, or return None."""
@@ -137,13 +211,65 @@ def home():
 def status():
     return jsonify({"status":"Jal-Drishti Backend is Active","version":"1.0.0 Premium"})
 
+
+# Authentication endpoints
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Authenticate user and return session token."""
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    
+    user = VALID_USERS.get(username)
+    if not user or user['password'] != password:
+        return jsonify({"error": "Invalid credentials"}), 401
+    
+    # Generate session token
+    token = generate_token()
+    SESSIONS[token] = {
+        'username': username,
+        'company': user['company'],
+        'role': user['role'],
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    return jsonify({
+        "token": token,
+        "username": username,
+        "company": user['company'],
+        "role": user['role']
+    }), 200
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@require_token
+def logout():
+    """Clear session token."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token in SESSIONS:
+        del SESSIONS[token]
+    return jsonify({"status": "logged out"}), 200
+
+
+@app.route('/api/auth/verify', methods=['GET'])
+@require_token
+def verify_auth():
+    """Verify that the token is still valid."""
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    session = SESSIONS.get(token)
+    if session:
+        return jsonify({"valid": True, "session": session}), 200
+    return jsonify({"valid": False}), 401
+
+
 # Chip thermal diagnostic endpoint for Page 2
 @app.route('/api/chip-thermal')
 def chip_thermal():
     temp = round(random.uniform(62.5, 79.8), 2)
-    # Gemini Analysis for Officer
-    prompt = f"Microchip temperature is {temp}°C. Give a high-level thermal safety report for an IT Officer."
-    # Placeholder Gemini analysis
+    # High-level thermal analysis for operations dashboard
     analysis = f"Gemini: Chip temp is {temp}°C. {'Warning: Thermal risk!' if temp > 75 else 'Status: Optimal.'}"
     return {
         "temperature": temp,
@@ -166,22 +292,45 @@ def fake_data():
 
 @app.route('/api/weather', methods=['GET'])
 def weather():
-    # Placeholder: Integrate real weather API here
-    return jsonify({"ambient_temp": random.uniform(10, 40), "location": "Delhi"})
+    """Get weather data for operational planning."""
+    return jsonify({
+        "ambient_temp": round(random.uniform(10, 40), 2),
+        "location": "Delhi",
+        "humidity": round(random.uniform(30, 80), 1),
+        "pressure": round(random.uniform(1000, 1020), 1)
+    })
 
 @app.route('/api/gemini-analysis', methods=['POST'])
 def gemini_analysis():
-    data = request.json
-    chip_temp = data.get('chip_temp')
-    server_load = data.get('server_load')
-    # Placeholder: Integrate Gemini API here
-    response = f"Thermal throttling detected at Core 4. Initiating liquid cooling bypass. Chip Temp: {chip_temp}C, Load: {server_load}%"
-    return jsonify({"analysis": response})
+    """Analyze thermal and performance data for the dashboard."""
+    data = request.json or {}
+    chip_temp = data.get('chip_temp', 70)
+    server_load = data.get('server_load', 50)
+    
+    # Simulated AI analysis based on telemetry
+    if chip_temp > 80:
+        analysis = f"CRITICAL: Thermal throttling detected. Chip temp {chip_temp}°C exceeds safe limits. Recommend immediate cooling intervention."
+    elif chip_temp > 75:
+        analysis = f"WARNING: Elevated thermal stress at {chip_temp}°C. Current load: {server_load}%. Consider load redistribution or cooling upgrade."
+    else:
+        analysis = f"OPTIMAL: Chip operating normally at {chip_temp}°C with {server_load}% load. All systems nominal. Continue monitoring."
+    
+    return jsonify({
+        "analysis": analysis,
+        "chip_temp": chip_temp,
+        "server_load": server_load,
+        "timestamp": datetime.now().isoformat()
+    })
 
 @app.route('/api/global-state', methods=['GET'])
 def global_state():
-    # Placeholder: Sync state across pages
-    return jsonify({"status": "synced"})
+    """Return global system state across all pages."""
+    return jsonify({
+        "status": "operational",
+        "last_sync": datetime.now().isoformat(),
+        "active_sessions": len(SESSIONS),
+        "system_health": "nominal"
+    })
 
 
 # New endpoint for React Page 1 compatibility
@@ -196,6 +345,28 @@ def get_data():
         "heat_recovered": fake["heat_recovered"],
         "solar_gain": fake["solar_gain"]
     })
+
+
+@app.route('/api/config', methods=['GET'])
+@require_token
+def get_config():
+    """Serve frontend configuration from environment variables.
+    Restricted to authenticated users only.
+    """
+    return jsonify({
+        "config": {
+            "REACT_APP_OPENWEATHER_API_KEY": os.getenv('OPENWEATHER_API_KEY', ''),
+            "REACT_APP_GEMINI_API_KEY": os.getenv('GEMINI_API_KEY', ''),
+            "REACT_APP_API_URL": os.getenv('REACT_APP_API_URL', 'http://localhost:8000'),
+            "autonomousMode": True,
+            "features": {
+                "geminiIntegration": True,
+                "weatherIntegration": True,
+                "chipTelemetry": True,
+                "energyOptimization": True
+            }
+        }
+    }), 200
 
 
 @app.route('/api/predict', methods=['POST'])

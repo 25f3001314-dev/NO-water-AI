@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "jal-drishti/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "jal-drishti/build/static/$1"
+    },
+    {
+      "src": "/(asset-manifest.json|manifest.json|favicon.ico|logo192.png|logo512.png|robots.txt)",
+      "dest": "jal-drishti/build/$1"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "main.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "jal-drishti/build/index.html"
+    }
+  ]
+}
