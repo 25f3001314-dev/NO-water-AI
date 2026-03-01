@@ -9,7 +9,8 @@
       "src": "jal-drishti/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "build"
+        "distDir": "build",
+        "buildCommand": "cd jal-drishti && npm install --legacy-peer-deps && npm run build"
       }
     }
   ],
