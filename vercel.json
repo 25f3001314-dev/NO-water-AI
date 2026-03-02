@@ -10,7 +10,7 @@
       "use": "@vercel/static-build",
       "config": {
         "distDir": "build",
-        "buildCommand": "cd jal-drishti && npm install --legacy-peer-deps && npm run build"
+        "buildCommand": "cd jal-drishti && npm install && npm run build"
       }
     }
   ],
