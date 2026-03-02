@@ -1,35 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "main.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "jal-drishti/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build",
-        "buildCommand": "cd jal-drishti && npm install && npm run build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/assets/(.*)",
-      "dest": "jal-drishti/build/assets/$1"
-    },
-    {
-      "src": "/index.html",
-      "dest": "jal-drishti/build/index.html"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "jal-drishti/build/index.html"
-    }
-  ]
+  "buildCommand": "cd jal-drishti && npm install && npm run build",
+  "outputDirectory": "jal-drishti/build"
 }
