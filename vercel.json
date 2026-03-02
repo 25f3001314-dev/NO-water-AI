@@ -16,12 +16,12 @@
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "jal-drishti/build/static/$1"
+      "src": "/assets/(.*)",
+      "dest": "jal-drishti/build/assets/$1"
     },
     {
-      "src": "/(asset-manifest.json|manifest.json|favicon.ico|logo192.png|logo512.png|robots.txt)",
-      "dest": "jal-drishti/build/$1"
+      "src": "/index.html",
+      "dest": "jal-drishti/build/index.html"
     },
     {
       "src": "/api/(.*)",
